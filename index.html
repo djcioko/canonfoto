@@ -3,28 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Canon Studio Pro - Versiune Finală</title>
+    <title>Canon Studio Pro - Final HDMI</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         :root { --accent: #00ff88; }
-        body { background: #000; color: white; font-family: sans-serif; margin: 0; overflow: hidden; }
+        body { background: #000; color: white; font-family: 'Segoe UI', sans-serif; margin: 0; overflow: hidden; }
         
-        /* Containerul pentru TV / HDMI */
+        /* Vizualizare Full Screen fără margini */
         .viewport { 
             position: relative; 
             width: 100vw; 
             height: 100vh; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
             background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        /* Video forțat să umple ecranul fără margini */
         video { 
             width: 100%; 
             height: 100%; 
-            object-fit: cover; 
+            object-fit: cover; /* ACEASTA ELIMINĂ MARGINILE NEGRE PE ECRAN */
+            background: #000;
         }
 
         /* Panoul lateral */
@@ -32,9 +32,9 @@
             position: absolute; 
             top: 0; left: 0; 
             width: 300px; height: 100%; 
-            background: rgba(15, 15, 15, 0.95); 
+            background: rgba(10, 10, 10, 0.95); 
             padding: 20px; 
-            transition: transform 0.3s ease; 
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); 
             z-index: 2000;
             overflow-y: auto;
             border-right: 2px solid var(--accent);
@@ -42,77 +42,79 @@
         }
         .sidebar.hidden { transform: translateX(-300px); }
         
-        /* Butonul de SETĂRI care rămâne vizibil în Full Screen */
+        /* Butonul de SETĂRI discret */
         #toggleMenu { 
             position: fixed; 
-            bottom: 15px; left: 15px; 
+            bottom: 20px; left: 20px; 
             z-index: 3000; 
             background: var(--accent); color: black; 
-            border: none; padding: 12px 18px; 
-            border-radius: 6px; font-weight: bold; cursor: pointer;
-            box-shadow: 0 0 15px rgba(0,0,0,1);
+            border: none; padding: 10px 15px; 
+            border-radius: 5px; font-weight: bold; cursor: pointer;
+            opacity: 0.7; transition: 0.3s;
         }
+        #toggleMenu:hover { opacity: 1; }
 
         .card { background: #1a1a1a; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #333; }
-        h3 { font-size: 11px; color: var(--accent); margin: 0 0 12px 0; text-transform: uppercase; letter-spacing: 1px; }
+        h3 { font-size: 11px; color: var(--accent); margin: 0 0 10px 0; text-transform: uppercase; letter-spacing: 1px; }
         
         #countdown { 
             position: absolute; 
-            font-size: 280px; 
+            font-size: 300px; 
             font-weight: bold; 
             color: var(--accent); 
             z-index: 1500; 
-            text-shadow: 0 0 60px black; 
+            text-shadow: 0 0 40px rgba(0,0,0,0.8); 
             pointer-events: none; 
             display: none; 
         }
 
-        input[type="range"] { width: 100%; margin-top: 10px; cursor: pointer; }
-        .btn-main { width: 100%; padding: 15px; font-weight: bold; cursor: pointer; border: none; border-radius: 6px; margin-top: 10px; }
-        label { font-size: 13px; display: block; margin-bottom: 5px; }
+        input[type="range"] { width: 100%; margin-top: 10px; accent-color: var(--accent); }
+        .btn-main { width: 100%; padding: 15px; font-weight: bold; cursor: pointer; border: none; border-radius: 6px; margin-top: 10px; transition: 0.2s; }
+        .btn-snap { background: var(--accent); color: black; font-size: 18px; }
+        .btn-snap:active { transform: scale(0.98); }
     </style>
 </head>
 <body>
 
 <div class="viewport" id="mainArea">
-    <button id="toggleMenu">⚙️ SETĂRI / MENIU</button>
+    <button id="toggleMenu">⚙️ MENIU</button>
     <div id="countdown">3</div>
     
     <div class="sidebar" id="sidebar">
         <div class="card">
-            <h3>1. SURSĂ FOTO (DSLR)</h3>
-            <select id="camSelect" style="width:100%; background:#000; color:white; padding:8px; border: 1px solid #444;"></select>
-            <button id="startBtn" class="btn-main" style="background:#333; color:white;">START LIVE VIEW</button>
+            <h3>1. SELECTEAZĂ CANON</h3>
+            <select id="camSelect" style="width:100%; background:#000; color:white; padding:10px; border: 1px solid #444;"></select>
+            <button id="startBtn" class="btn-main" style="background:#444; color:white;">PORNEȘTE LIVE</button>
         </div>
 
         <div class="card">
-            <h3>2. TELECOMANDĂ</h3>
-            <div id="remoteStatus" style="color: #00ff88; font-size: 12px; font-weight:bold;">STATUS: CONECTATĂ ✅</div>
+            <h3>2. CONEXIUNI</h3>
+            <div id="remoteStatus" style="color: #00ff88; font-size: 13px;">TELECOMANDĂ: OK ✅</div>
+            <div style="font-size: 11px; color: #888; margin-top: 5px;">Tasta: SPACE activă</div>
         </div>
 
         <div class="card">
-            <h3>3. TIMER CAPTURĂ</h3>
-            <div style="display: flex; align-items: center; gap: 10px;">
+            <h3>3. CONFIGURARE TIMER</h3>
+            <div style="display: flex; align-items: center; justify-content: space-between;">
                 <label>Activare Timer:</label>
-                <input type="checkbox" id="timerEnabled" style="width: 20px; height: 20px;">
+                <input type="checkbox" id="timerEnabled" checked style="width:20px; height:20px;">
             </div>
-            
-            <div id="timerControls" style="margin-top:15px; border-top: 1px solid #333; padding-top: 10px;">
+            <div style="margin-top:15px;">
                 <label>Secunde: <span id="secVal" style="color:var(--accent); font-weight:bold;">3</span></label>
                 <input type="range" id="timerSecs" min="1" max="5" value="3">
             </div>
         </div>
 
         <div class="card">
-            <h3>4. REGLAJE IMAGINE</h3>
+            <h3>4. OPTIMIZARE IMAGINE</h3>
             <label>Luminozitate</label>
             <input type="range" id="br" min="0" max="200" value="100">
-            <label style="margin-top:15px;">Contrast</label>
+            <label style="margin-top:10px;">Contrast</label>
             <input type="range" id="ct" min="50" max="150" value="100">
         </div>
 
-        <button id="capBtn" class="btn-main" style="background:var(--accent); color:black; font-size: 16px;">FĂ POZA (SPACE)</button>
-        <button id="fullScreenBtn" class="btn-main" style="background:#222; color:white; border: 1px solid #444;">MOD FULL SCREEN</button>
+        <button id="capBtn" class="btn-main btn-snap">FĂ POZA (SPACE)</button>
+        <button id="fullScreenBtn" class="btn-main" style="background:#222; color:white; font-size:11px;">MOD FULL SCREEN</button>
     </div>
 
     <video id="video" autoplay playsinline></video>
@@ -126,13 +128,13 @@
     const countdown = document.getElementById('countdown');
     const brInput = document.getElementById('br'), ctInput = document.getElementById('ct');
 
-    // 1. Telecomanda PeerJS
+    // 1. Telecomanda (PeerJS)
     const peer = new Peer('djcioko_canon_booth_2026_xyz');
     peer.on('connection', (conn) => {
         conn.on('data', (data) => { if(data === 'SNAP') startCapture(); });
     });
 
-    // 2. Meniu și Tasta Space
+    // 2. Tasta Space & Navigare
     document.getElementById('toggleMenu').onclick = () => sidebar.classList.toggle('hidden');
     
     window.addEventListener('keydown', (e) => {
@@ -147,10 +149,8 @@
         else document.exitFullscreen();
     };
 
-    // 3. Logică Timer
-    timerSecs.oninput = () => { 
-        secVal.innerText = timerSecs.value; 
-    };
+    // 3. Control Timer
+    timerSecs.oninput = () => { secVal.innerText = timerSecs.value; };
 
     function startCapture() {
         if (timerEnabled.checked) {
@@ -171,29 +171,45 @@
         }
     }
 
-    // 4. Salvare Automată (Fără margini negre, rezoluție mare)
+    // 4. SALVARE PROFESIONALĂ (CROP LA 16:9)
     function takePhoto() {
         const can = document.getElementById('procCanvas');
         const ctx = can.getContext('2d');
         
-        // Forțăm 16:9 la rezoluție mare pentru a tăia marginile DSLR-ului
+        // Salvăm la rezoluție 4K (16:9) pentru a elimina marginile negre din fișier
         can.width = 3840; 
         can.height = 2160;
 
         ctx.filter = v.style.filter;
         
-        // Desenează imaginea pe tot canvas-ul (Stretch/Fill)
-        ctx.drawImage(v, 0, 0, can.width, can.height);
+        // Calculăm crop-ul pentru a umple fișierul 16:9 fără să turtim imaginea
+        const videoRatio = v.videoWidth / v.videoHeight;
+        const canvasRatio = can.width / can.height;
+        let sw, sh, sx, sy;
+
+        if (videoRatio > canvasRatio) {
+            sh = v.videoHeight;
+            sw = v.videoHeight * canvasRatio;
+            sx = (v.videoWidth - sw) / 2;
+            sy = 0;
+        } else {
+            sw = v.videoWidth;
+            sh = v.videoWidth / canvasRatio;
+            sx = 0;
+            sy = (v.videoHeight - sh) / 2;
+        }
+
+        ctx.drawImage(v, sx, sy, sw, sh, 0, 0, can.width, can.height);
         
         const link = document.createElement('a');
-        link.download = `Canon_Photo_${Date.now()}.png`;
+        link.download = `Booth_Canon_16-9_${Date.now()}.png`;
         link.href = can.toDataURL('image/png', 1.0);
         link.click();
     }
 
     document.getElementById('capBtn').onclick = startCapture;
 
-    // Filtre și Reținere setări (LocalStorage)
+    // Filtre și LocalStorage
     const applyFX = () => {
         v.style.filter = `brightness(${brInput.value}%) contrast(${ctInput.value}%)`;
         localStorage.setItem('booth_br', brInput.value);
@@ -203,7 +219,6 @@
     ctInput.oninput = applyFX;
 
     async function init() {
-        // Încarcă setările vechi
         if(localStorage.getItem('booth_br')) brInput.value = localStorage.getItem('booth_br');
         if(localStorage.getItem('booth_ct')) ctInput.value = localStorage.getItem('booth_ct');
         applyFX();
