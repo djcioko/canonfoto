@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Studio Monitor - Canon HDMI</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
+    <style>
+        :root { --accent: #2ed573; --bg: #000; }
+        body { background: var(--bg); color: white; font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        
+        /* Interfața laterală */
+        .controls { width: 280px; background: #111; padding: 15px; border-right: 1px solid #333; position: absolute; z-index: 10; height: 100%; transition: 0.3s; }
+        .main-view { flex-grow: 1; display: flex; align-items: center; justify-content: center; background: #000; }
+        
+        canvas { max-width: 100%; max-height: 100%; border: 1px solid #222; }
+
+        .card { background: #1a1a1a; padding: 12px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #333; }
+        h3 { font-size: 11px; color: var(--accent); margin: 0 0 10px 0; text-transform: uppercase; letter-spacing: 1px; }
+
+        input[type="range"] { width: 100%; margin: 8px 0; accent-color: var(--accent); }
+        label { font-size: 10px; color: #888; }
+
+        .btn { width: 100%; padding: 12px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 5px; text-transform: uppercase; }
+        .btn-start { background: #333; color: white; }
+        .btn-capture { background: var(--accent); color: black; font-size: 14px; margin-top: 15px; }
+        
+        select { width: 100%; background: #000; color: white; padding: 8px; border: 1px solid #444; border-radius: 4px; }
+        
+        /* Ascunde controalele pe ecrane mici dacă e nevoie */
+        .hide-ui { transform: translateX(-100%); }
+    </style>
+</head>
+<body>
+
+<div class="controls" id="sidebar">
+    <div class="card">
+        <h3>1. Sursă Video (HDMI)</h3>
+        <button id="startBtn" class="btn btn-start">Selectează Cameră</button>
+        <p style="font-size: 9px; color: #555; margin-top: 5px;">Conectați Capture Card-ul prin OTG.</p>
+    </div>
+
+    <div class="card">
+        <h3>2. Procesare Imagine</h3>
+        <label>Luminozitate</label>
+        <input type="range" id="bright" min="0" max="200" value="100">
+        <label>Saturație</label>
+        <input type="range" id="sat" min="0" max="200" value="100">
+        <label>Contrast</label>
+        <input type="range" id="cont" min="50" max="150" value="100">
+    </div>
+
+    <div class="card">
+        <h3>3. Fundal (AI Cut-Out)</h3>
+        <select id="bgType">
+            <option value="none">Fără Fundal (Natural)</option>
+            <option value="image">Înlocuiește cu Imagine</option>
+        </select>
+        <input type="file" id="bgFile" accept="image/*" style="margin-top:10px; font-size: 10px;">
+    </div>
+
+    <button id="captureBtn" class="btn btn-capture">SALVEAZĂ POZA</button>
+    <p id="msg" style="font-size: 10px; text-align: center; color: var(--accent);"></p>
+</div>
+
+<div class="main-view">
+    <canvas id="outputCanvas"></canvas>
+</div>
+
+<video id="v_raw" autoplay playsinline style="display:none"></video>
+<img id="bg_img" style="display:none">
+
+<script>
+    const video = document.getElementById('v_raw');
+    const canvas = document.getElementById('outputCanvas');
+    const ctx = canvas.getContext('2d');
+    const bgImg = document.getElementById('bg_img');
+    
+    // Configurații
+    let streamActive = false;
+    const selfie = new SelfieSegmentation({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}`});
+    selfie.setOptions({ modelSelection: 1 });
+    selfie.onResults(drawEverything);
+
+    // 1. Pornire Cameră (Capture Card)
+    document.getElementById('startBtn').onclick = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { width: { ideal: 1920 }, height: { ideal: 1080 } } 
+            });
+            video.srcObject = stream;
+            streamActive = true;
+            renderLoop();
+        } catch (err) {
+            alert("Eroare la accesarea camerei. Verificați permisiunile.");
+        }
+    };
+
+    // 2. Loop de procesare
+    async function renderLoop() {
+        if(video.readyState >= 2) {
+            await selfie.send({ image: video });
+        }
+        requestAnimationFrame(renderLoop);
+    }
+
+    // 3. Desenare pe Canvas cu Filtre și AI
+    function drawEverything(results) {
+        canvas.width = 1920; 
+        canvas.height = 1080;
+
+        ctx.save();
+        
+        // Aplicăm filtrele
+        const b = document.getElementById('bright').value;
+        const s = document.getElementById('sat').value;
+        const c = document.getElementById('cont').value;
+        ctx.filter = `brightness(${b}%) saturate(${s}%) contrast(${c}%)`;
+
+        const mode = document.getElementById('bgType').value;
+
+        if (mode === 'image' && bgImg.src && results.segmentationMask) {
+            // Desenăm fundalul selectat
+            ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
+            
+            // Decupăm omul peste fundal
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = canvas.width;
+            tempCanvas.height = canvas.height;
+            const tCtx = tempCanvas.getContext('2d');
+            
+            tCtx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+            tCtx.globalCompositeOperation = 'destination-in';
+            tCtx.drawImage(results.segmentationMask, 0, 0, canvas.width, canvas.height);
+            
+            ctx.drawImage(tempCanvas, 0, 0);
+        } else {
+            // Vedere normală (fără AI)
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        }
+
+        ctx.restore();
+    }
+
+    // 4. Upload Fundal
+    document.getElementById('bgFile').onchange = (e) => {
+        const file = e.target.files[0];
+        if(file) bgImg.src = URL.createObjectURL(file);
+    };
+
+    // 5. SALVARE POZĂ ÎN DISPOZITIV
+    document.getElementById('captureBtn').onclick = () => {
+        const link = document.createElement('a');
+        const timestamp = new Date().getTime();
+        link.download = `Studio_Photo_${timestamp}.png`;
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+        
+        document.getElementById('msg').innerText = "POZĂ SALVATĂ!";
+        setTimeout(() => document.getElementById('msg').innerText = "", 2000);
+    };
+
+    // Dublu click pe canvas pentru a ascunde meniul (Full Screen Preview)
+    canvas.ondblclick = () => {
+        document.getElementById('sidebar').classList.toggle('hide-ui');
+    };
+</script>
+
+</body>
+</html>
