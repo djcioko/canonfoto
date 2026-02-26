@@ -1,211 +1,25 @@
-<!DOCTYPE html>
-<html lang="ro">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Canon Studio Pro HDMI</title>
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-    <style>
-        :root { --accent: #00ff88; }
-        body { background: #000; color: white; font-family: sans-serif; margin: 0; overflow: hidden; }
-        
-        /* Container principal pentru TV/HDMI */
-        .viewport { 
-            position: relative; 
-            width: 100vw; 
-            height: 100vh; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            background: #000;
-        }
-
-        /* Imaginea Video - Setată să umple ecranul */
-        video { 
-            width: 100%; 
-            height: 100%; 
-            object-fit: cover; /* Umple tot ecranul, eliminând marginile negre */
-        }
-
-        /* Panoul de Setări */
-        .sidebar { 
-            position: absolute; 
-            top: 0; left: 0; 
-            width: 280px; height: 100%; 
-            background: rgba(15, 15, 15, 0.95); 
-            padding: 15px; 
-            transition: transform 0.3s ease; 
-            z-index: 2000;
-            overflow-y: auto;
-            border-right: 1px solid #333;
-        }
-        .sidebar.hidden { transform: translateX(-280px); }
-        
-        /* Butonul de SETĂRI care rămâne mereu peste Full Screen */
-        #toggleMenu { 
-            position: fixed; 
-            bottom: 10px; left: 10px; 
-            z-index: 3000; 
-            background: var(--accent); color: black; 
-            border: none; padding: 10px 15px; 
-            border-radius: 4px; font-weight: bold; cursor: pointer;
-            box-shadow: 0 0 10px rgba(0,0,0,0.8);
-            font-size: 12px;
-        }
-
-        .card { background: #1a1a1a; padding: 10px; border-radius: 6px; margin-bottom: 10px; border: 1px solid #333; }
-        h3 { font-size: 10px; color: var(--accent); margin: 0 0 10px 0; text-transform: uppercase; letter-spacing: 1px; }
-        
-        #countdown { 
-            position: absolute; 
-            font-size: 250px; 
-            font-weight: bold; 
-            color: var(--accent); 
-            z-index: 1500; 
-            text-shadow: 0 0 50px black; 
-            pointer-events: none; 
-            display: none; 
-        }
-
-        input[type="range"] { width: 100%; }
-        .btn-main { width: 100%; padding: 12px; font-weight: bold; cursor: pointer; border: none; border-radius: 4px; margin-top: 5px; }
-    </style>
-</head>
-<body>
-
-<div class="viewport" id="mainArea">
-    <button id="toggleMenu">⚙️ SETĂRI</button>
-    <div id="countdown">3</div>
-    
-    <div class="sidebar" id="sidebar">
-        <div class="card">
-            <h3>1. SURSĂ VIDEO (HDMI/USB)</h3>
-            <select id="camSelect" style="width:100%; background:#000; color:white; padding:5px;"></select>
-            <button id="startBtn" class="btn-main" style="background:#333; color:white;">START LIVE VIEW</button>
-        </div>
-
-        <div class="card">
-            <h3>2. TELECOMANDĂ STATUS</h3>
-            <div id="remoteStatus" style="color: #00ff88; font-size: 11px; font-weight:bold;">CONECTATĂ ✅</div>
-        </div>
-
-        <div class="card">
-            <h3>3. TIMER FOTO</h3>
-            <label style="font-size:12px;">Activează Timer:</label>
-            <input type="checkbox" id="timerEnabled">
-            <div id="timerControls" style="margin-top:10px; opacity: 0.5; pointer-events: none;">
-                <input type="range" id="timerSecs" min="1" max="5" value="3">
-                <div style="text-align:center; font-size:11px;">Secunde: <span id="secVal">3</span></div>
-            </div>
-        </div>
-
-        <div class="card">
-            <h3>4. AJUSTARE IMAGINE</h3>
-            <label style="font-size:10px;">Luminozitate</label>
-            <input type="range" id="br" min="0" max="200" value="100">
-            <label style="font-size:10px;">Contrast</label>
-            <input type="range" id="ct" min="50" max="150" value="100">
-        </div>
-
-        <button id="capBtn" class="btn-main" style="background:var(--accent); color:black;">FĂ POZA (SNAP)</button>
-        <button id="fullScreenBtn" class="btn-main" style="background:#444; color:white; font-size:10px;">MOD FULL SCREEN</button>
-    </div>
-
-    <video id="video" autoplay playsinline></video>
-</div>
-
-<canvas id="procCanvas" style="display:none;"></canvas>
-
-<script>
-    const v = document.getElementById('video'), sidebar = document.getElementById('sidebar');
-    const timerEnabled = document.getElementById('timerEnabled'), timerControls = document.getElementById('timerControls');
-    const timerSecs = document.getElementById('timerSecs'), secVal = document.getElementById('secVal');
-    const countdown = document.getElementById('countdown');
-
-    // 1. Telecomanda PeerJS (Codul tău funcțional)
-    const peer = new Peer('djcioko_canon_booth_2026_xyz');
-    peer.on('connection', (conn) => {
-        conn.on('data', (data) => { if(data === 'SNAP') startCapture(); });
-    });
-
-    // 2. Control Meniu & Tasta Space
-    document.getElementById('toggleMenu').onclick = () => sidebar.classList.toggle('hidden');
-    
-    window.addEventListener('keydown', (e) => {
-        if (e.code === 'Space' && !sidebar.contains(document.activeElement)) {
-            e.preventDefault();
-            startCapture();
-        }
-    });
-
-    document.getElementById('fullScreenBtn').onclick = () => {
-        if (!document.fullscreenElement) document.getElementById('mainArea').requestFullscreen();
-        else document.exitFullscreen();
-    };
-
-    // 3. Logica Timer (On/Off)
-    timerEnabled.onchange = () => {
-        timerControls.style.opacity = timerEnabled.checked ? "1" : "0.5";
-        timerControls.style.pointerEvents = timerEnabled.checked ? "auto" : "none";
-    };
-    timerSecs.oninput = () => { secVal.innerText = timerSecs.value; };
-
-    function startCapture() {
-        if (timerEnabled.checked) {
-            let count = parseInt(timerSecs.value);
-            countdown.style.display = 'block';
-            countdown.innerText = count;
-            let interval = setInterval(() => {
-                count--;
-                if(count > 0) countdown.innerText = count;
-                else { clearInterval(interval); countdown.style.display = 'none'; takePhoto(); }
-            }, 1000);
-        } else {
-            takePhoto();
-        }
-    }
-
-    // 4. Salvare Automată (Configurată de tine în Chrome)
-    function takePhoto() {
+function takePhoto() {
         const can = document.getElementById('procCanvas');
-        can.width = v.videoWidth; can.height = v.videoHeight;
         const ctx = can.getContext('2d');
-        ctx.filter = v.style.filter;
-        ctx.drawImage(v, 0, 0);
         
+        // Setăm o rezoluție de salvare mai mare (4K-ish) pentru claritate
+        // Păstrăm formatul 16:9 pentru a elimina marginile negre ale DSLR-ului
+        can.width = 3840; 
+        can.height = 2160;
+
+        // Aplicăm filtrele setate de tine (luminozitate/contrast)
+        ctx.filter = v.style.filter;
+        
+        // Desenăm imaginea forțând umplerea cadrului (Stretch/Crop)
+        // Aceasta elimină dungile negre indiferent de ce trimite Canon-ul
+        ctx.drawImage(v, 0, 0, can.width, can.height);
+        
+        // Creăm link-ul de descărcare automată
         const link = document.createElement('a');
-        link.download = `Canon_Booth_${Date.now()}.png`;
-        link.href = can.toDataURL('image/png');
+        const dataAzi = new Date().toLocaleTimeString().replace(/:/g, '-');
+        link.download = `Canon_Photo_4K_${dataAzi}.png`;
+        link.href = can.toDataURL('image/png', 1.0); // Calitate maximă
         link.click();
+        
+        console.log("Poza a fost salvată la rezoluție mare, format 16:9.");
     }
-
-    document.getElementById('capBtn').onclick = startCapture;
-
-    // Filtre & Salvare Setări
-    const applyFX = () => {
-        v.style.filter = `brightness(${document.getElementById('br').value}%) contrast(${document.getElementById('ct').value}%)`;
-        localStorage.setItem('booth_br', document.getElementById('br').value);
-        localStorage.setItem('booth_ct', document.getElementById('ct').value);
-    };
-    document.getElementById('br').oninput = applyFX;
-    document.getElementById('ct').oninput = applyFX;
-
-    async function init() {
-        // Încarcă setările salvate
-        if(localStorage.getItem('booth_br')) document.getElementById('br').value = localStorage.getItem('booth_br');
-        if(localStorage.getItem('booth_ct')) document.getElementById('ct').value = localStorage.getItem('booth_ct');
-        applyFX();
-
-        const devs = await navigator.mediaDevices.enumerateDevices();
-        const cams = devs.filter(d => d.kind === 'videoinput');
-        document.getElementById('camSelect').innerHTML = cams.map((c, i) => `<option value="${c.deviceId}">${c.label || 'Camera '+(i+1)}</option>`).join('');
-    }
-    
-    document.getElementById('startBtn').onclick = async () => {
-        const s = await navigator.mediaDevices.getUserMedia({video:{deviceId:{exact:document.getElementById('camSelect').value}, width: 1920, height: 1080}});
-        v.srcObject = s;
-    };
-    init();
-</script>
-</body>
-</html>
