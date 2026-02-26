@@ -2,113 +2,190 @@
 <html lang="ro">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Canon Monitor - Pro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Canon AI Booth - Custom Trigger</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
     <style>
-        body { background: #000; color: white; font-family: sans-serif; margin: 0; overflow: hidden; display: flex; }
-        .sidebar { width: 250px; background: #111; padding: 15px; border-right: 1px solid #333; z-index: 100; }
-        .main { flex-grow: 1; display: flex; align-items: center; justify-content: center; position: relative; }
-        video { max-width: 100%; max-height: 100%; transform: scaleX(1); } /* Schimbă la -1 dacă vrei oglindă */
-        
-        .card { background: #222; padding: 10px; border-radius: 8px; margin-bottom: 10px; }
-        h3 { font-size: 10px; color: #00ff88; text-transform: uppercase; margin: 0 0 10px 0; }
-        select, .btn { width: 100%; padding: 12px; margin-top: 5px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; }
-        .btn-start { background: #00ff88; color: #000; }
-        .btn-capture { background: #ff4757; color: #fff; margin-top: 20px; font-size: 16px; }
-        
-        /* Efecte de imagine (CSS pur, nu blochează procesorul) */
-        #v-container { position: relative; }
+        :root { --accent: #00ff88; }
+        body { background: #000; color: white; font-family: sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        .sidebar { width: 260px; background: #111; padding: 15px; border-right: 1px solid #333; overflow-y: auto; }
+        .main { flex-grow: 1; display: flex; align-items: center; justify-content: center; position: relative; background: #050505; }
+        video { max-width: 95%; max-height: 95%; border: 1px solid #222; transform: scaleX(-1); }
+        .card { background: #1a1a1a; padding: 12px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #333; }
+        h3 { font-size: 10px; color: var(--accent); margin: 0 0 10px 0; text-transform: uppercase; }
+        select, input[type="range"], .btn { width: 100%; margin: 5px 0; box-sizing: border-box; }
+        .btn { padding: 15px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; transition: 0.2s; }
+        .btn-start { background: #333; color: white; }
+        .btn-capture { background: var(--accent); color: black; margin-top: 15px; }
+        .btn-key { background: #444; color: #00ff88; font-size: 11px; border: 1px dashed var(--accent); }
+        label { font-size: 9px; color: #666; }
+        #loading { position: absolute; display: none; background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px; z-index: 200; border: 1px solid var(--accent); text-align: center; }
+        #countdown { position: absolute; font-size: 150px; font-weight: bold; color: var(--accent); z-index: 300; display: none; text-shadow: 0 0 20px black; }
     </style>
 </head>
 <body>
 
+<div id="loading">PROCESARE AI...<br><small>Vă rugăm așteptați</small></div>
+<div id="countdown">3</div>
+
 <div class="sidebar">
     <div class="card">
-        <h3>1. SURSA VIDEO</h3>
-        <select id="camSelect" style="background:#333; color:white;"></select>
-        <button id="startBtn" class="btn btn-start">PORNEȘTE CAMERA</button>
+        <h3>1. SURSĂ HDMI</h3>
+        <select id="camSelect" style="background:#000; color:white; padding:8px;"></select>
+        <button id="startBtn" class="btn btn-start">START LIVE VIEW</button>
     </div>
 
     <div class="card">
-        <h3>2. AJUSTARE (REAL-TIME)</h3>
-        <label style="font-size:10px;">Luminozitate</label>
-        <input type="range" id="br" min="0" max="200" value="100" style="width:100%">
-        <label style="font-size:10px;">Contrast</label>
-        <input type="range" id="ct" min="50" max="150" value="100" style="width:100%">
+        <h3>2. TRIGGER TASTĂ</h3>
+        <button id="setKeyBtn" class="btn btn-key">SETEAZĂ TASTA CAPTURĂ</button>
+        <p id="keyStatus" style="font-size: 10px; color: #888; text-align: center; margin-top: 5px;">Tasta actuală: <b id="currentKey">Space</b></p>
     </div>
 
-    <button id="capBtn" class="btn btn-capture">SALVEAZĂ POZA</button>
-    <p id="status" style="font-size:10px; color:#666; text-align:center; margin-top:10px;">Conectați HDMI Capture Card</p>
+    <div class="card">
+        <h3>3. AJUSTĂRI IMAGINE</h3>
+        <label>Luminozitate</label>
+        <input type="range" id="br" min="0" max="200" value="100">
+        <label>Contrast</label>
+        <input type="range" id="ct" min="50" max="150" value="100">
+    </div>
+
+    <div class="card">
+        <h3>4. FUNDAL AI</h3>
+        <select id="bgMode">
+            <option value="none">Fără (Original)</option>
+            <option value="image">Înlocuire Fundal</option>
+        </select>
+        <input type="file" id="bgFile" accept="image/*">
+    </div>
+
+    <button id="capBtn" class="btn btn-capture">FĂ POZA (Click sau Tastă)</button>
 </div>
 
 <div class="main">
-    <div id="v-container">
-        <video id="video" autoplay playsinline></video>
-    </div>
+    <video id="video" autoplay playsinline></video>
 </div>
 
-<canvas id="canvas" style="display:none;"></canvas>
+<canvas id="procCanvas" style="display:none;"></canvas>
+<img id="bgImg" style="display:none;">
 
 <script>
-    const v = document.getElementById('video');
-    const sel = document.getElementById('camSelect');
-    const btn = document.getElementById('startBtn');
-    const cap = document.getElementById('capBtn');
-    const can = document.getElementById('canvas');
+    const v = document.getElementById('video'), sel = document.getElementById('camSelect'), bgImg = document.getElementById('bgImg');
+    const procCanvas = document.getElementById('procCanvas'), ctx = procCanvas.getContext('2d');
+    const countEl = document.getElementById('countdown');
+    
+    let captureKey = localStorage.getItem('captureKey') || " "; // Implicit Space
+    let isListeningForKey = false;
 
-    // 1. Găsește camerele (Inclusiv USB)
+    // Inițializare AI
+    const selfie = new SelfieSegmentation({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}`});
+    selfie.setOptions({ modelSelection: 1 });
+
+    // --- LOGICĂ TASTĂ PERSONALIZATĂ ---
+    document.getElementById('currentKey').innerText = captureKey === " " ? "Space" : captureKey;
+
+    document.getElementById('setKeyBtn').onclick = () => {
+        isListeningForKey = true;
+        document.getElementById('setKeyBtn').innerText = "APASĂ TASTA DORITĂ...";
+        document.getElementById('setKeyBtn').style.background = "#ff4757";
+    };
+
+    window.addEventListener('keydown', (e) => {
+        if (isListeningForKey) {
+            captureKey = e.key;
+            localStorage.setItem('captureKey', captureKey);
+            document.getElementById('currentKey').innerText = captureKey === " " ? "Space" : captureKey;
+            isListeningForKey = false;
+            document.getElementById('setKeyBtn').innerText = "SETEAZĂ TASTA CAPTURĂ";
+            document.getElementById('setKeyBtn').style.background = "#444";
+            e.preventDefault();
+            return;
+        }
+
+        if (e.key === captureKey) {
+            startCaptureSequence();
+        }
+    });
+
+    // --- VIDEO ---
     async function init() {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const cams = devices.filter(d => d.kind === 'videoinput');
+        const devs = await navigator.mediaDevices.enumerateDevices();
+        const cams = devs.filter(d => d.kind === 'videoinput');
         sel.innerHTML = cams.map((c, i) => `<option value="${c.deviceId}">${c.label || 'Camera ' + (i+1)}</option>`).join('');
     }
 
-    // 2. Pornește imaginea (Fără AI, doar video pur)
-    btn.onclick = async () => {
-        if (v.srcObject) v.srcObject.getTracks().forEach(t => t.stop());
+    document.getElementById('startBtn').onclick = async () => {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: sel.value }, width: 1920, height: 1080 } });
+        v.srcObject = stream;
+    };
+
+    function updateV() { v.style.filter = `brightness(${document.getElementById('br').value}%) contrast(${document.getElementById('ct').value}%)`; }
+    document.getElementById('br').oninput = updateV;
+    document.getElementById('ct').oninput = updateV;
+    document.getElementById('bgFile').onchange = (e) => { bgImg.src = URL.createObjectURL(e.target.files[0]); };
+
+    // --- SECVENȚĂ CAPTURĂ ---
+    document.getElementById('capBtn').onclick = startCaptureSequence;
+
+    function startCaptureSequence() {
+        if(!v.srcObject) return;
         
-        const constraints = {
-            video: { 
-                deviceId: { exact: sel.value },
-                width: { ideal: 1920 },
-                height: { ideal: 1080 }
+        let count = 3;
+        countEl.innerText = count;
+        countEl.style.display = 'block';
+
+        const timer = setInterval(async () => {
+            count--;
+            if(count > 0) {
+                countEl.innerText = count;
+            } else {
+                clearInterval(timer);
+                countEl.style.display = 'none';
+                triggerAI();
             }
-        };
-
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia(constraints);
-            v.srcObject = stream;
-            document.getElementById('status').innerText = "Camera Activă!";
-        } catch (e) {
-            alert("Eroare la pornire. Încearcă altă cameră din listă.");
-        }
-    };
-
-    // 3. Aplică filtrele CSS (Sunt mult mai rapide)
-    function updateFilters() {
-        v.style.filter = `brightness(${document.getElementById('br').value}%) contrast(${document.getElementById('ct').value}%)`;
+        }, 1000);
     }
-    document.getElementById('br').oninput = updateFilters;
-    document.getElementById('ct').oninput = updateFilters;
 
-    // 4. Salvează poza
-    cap.onclick = () => {
-        can.width = v.videoWidth;
-        can.height = v.videoHeight;
-        const ctx = can.getContext('2d');
-        // Aplicăm filtrele și pe poză
+    async function triggerAI() {
+        document.getElementById('loading').style.display = 'block';
+        const mode = document.getElementById('bgMode').value;
+
+        if(mode === 'image' && bgImg.src) {
+            await selfie.send({ image: v });
+        } else {
+            saveFinal(null);
+        }
+    }
+
+    selfie.onResults((res) => saveFinal(res));
+
+    function saveFinal(results) {
+        procCanvas.width = 1920; procCanvas.height = 1080;
+        ctx.save();
         ctx.filter = v.style.filter;
-        ctx.drawImage(v, 0, 0, can.width, can.height);
-        
-        const link = document.createElement('a');
-        link.download = `Canon_Foto_${Date.now()}.png`;
-        link.href = can.toDataURL('image/png');
-        link.click();
-    };
 
-    // Cerem permisiune la start ca să vedem numele camerelor
+        if (results && results.segmentationMask) {
+            ctx.drawImage(bgImg, 0, 0, 1920, 1080);
+            const tCan = document.createElement('canvas'); tCan.width = 1920; tCan.height = 1080;
+            const tCtx = tCan.getContext('2d');
+            tCtx.drawImage(results.image, 0, 0, 1920, 1080);
+            tCtx.globalCompositeOperation = 'destination-in';
+            tCtx.drawImage(results.segmentationMask, 0, 0, 1920, 1080);
+            ctx.drawImage(tCan, 0, 0);
+        } else {
+            ctx.drawImage(v, 0, 0, 1920, 1080);
+        }
+        
+        ctx.restore();
+
+        const link = document.createElement('a');
+        link.download = `Booth_${Date.now()}.png`;
+        link.href = procCanvas.toDataURL('image/png');
+        link.click();
+        
+        document.getElementById('loading').style.display = 'none';
+    }
+
     navigator.mediaDevices.getUserMedia({video: true}).then(init);
 </script>
-
 </body>
 </html>
