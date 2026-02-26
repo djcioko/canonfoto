@@ -3,231 +3,139 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Canon Foto</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <title>Canon Studio Pro</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        body { margin: 0; padding: 0; background-color: #000; color: #fff; font-family: sans-serif; display: flex; height: 100vh; overflow: hidden; }
-        #leftPanel { width: 300px; padding: 20px; border-right: 1px solid #333; display: flex; flex-direction: column; transition: width 0.3s; /* Adăugat pentru animație */ position: relative; }
-        /* Adăugat pentru a ascunde conținutul când panoul e restrâns */
-        #leftPanel.collapsed { width: 0; padding: 20px 0; border-right: none; }
-        #leftPanel.collapsed * { visibility: hidden; opacity: 0; transition: visibility 0s, opacity 0.3s; }
+        :root { --accent: #00ff88; }
+        body { background: #000; color: white; font-family: sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        
+        /* Panoul Lateral */
+        .sidebar { width: 280px; background: #111; padding: 15px; border-right: 1px solid #333; overflow-y: auto; transition: 0.3s; z-index: 100; }
+        .sidebar.hidden { margin-left: -280px; }
+        
+        /* Buton de revenire la setări - Vizibil mereu */
+        #toggleMenu { position: fixed; bottom: 20px; left: 20px; z-index: 999; background: var(--accent); color: black; border: none; padding: 10px 15px; border-radius: 5px; font-weight: bold; cursor: pointer; }
 
-        #leftPanel h2 { color: #00ff00; font-size: 1.2rem; margin-top: 0; display: flex; align-items: center; justify-content: space-between; }
-        .section { margin-bottom: 20px; }
-        .section h3 { font-size: 0.9rem; margin-bottom: 10px; }
-        .control-group { margin-bottom: 10px; }
-        .control-group label { display: block; font-size: 0.8rem; color: #aaa; }
-        select, input[type="range"] { width: 100%; padding: 5px; background: #222; border: 1px solid #444; color: #fff; }
-        input[type="range"] { margin: 10px 0; }
-        #rightArea { flex-grow: 1; display: flex; align-items: center; justify-content: center; position: relative; }
-        #videoWrapper { border: 4px solid #333; position: relative; display: flex; align-items: center; justify-content: center; }
-        #videoFeed { width: 100%; height: auto; }
-        button { background-color: #222; border: 1px solid #444; color: #fff; padding: 10px; cursor: pointer; transition: background 0.2s; }
-        button:hover { background-color: #333; }
-        #snapBtn { width: 100%; background-color: #00ff88; color: #000; border: none; font-weight: bold; font-size: 1rem; padding: 15px; margin-top: auto; }
-        #snapBtn:hover { background-color: #00e67e; }
-
-        /* Stiluri pentru noile elemente */
-        #leftPanelToggle { position: absolute; top: 15px; right: 15px; cursor: pointer; color: #00ff00; font-size: 1.2rem; }
-        #fullscreenBtn { position: absolute; top: 10px; right: 10px; color: rgba(255, 255, 255, 0.7); font-size: 1.2rem; cursor: pointer; z-index: 10; }
-        #fullscreenBtn:hover { color: #fff; }
-        #countdownOverlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 150px; color: #00ff88; background-color: rgba(0, 0, 0, 0.5); visibility: hidden; z-index: 20; }
-        #countdownOverlay.active { visibility: visible; }
-        .toggle-switch { position: relative; display: inline-block; width: 40px; height: 20px; }
-        .toggle-switch input { opacity: 0; width: 0; height: 0; }
-        .slider-round { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 20px; }
-        .slider-round:before { position: absolute; content: ""; height: 16px; width: 16px; left: 2px; bottom: 2px; background-color: white; transition: .4s; border-radius: 50%; }
-        input:checked + .slider-round { background-color: #00ff88; }
-        input:checked + .slider-round:before { transform: translateX(20px); }
+        .main { flex-grow: 1; display: flex; align-items: center; justify-content: center; position: relative; background: #000; }
+        video { max-width: 100%; max-height: 100%; transform: scaleX(-1); }
+        
+        .card { background: #1a1a1a; padding: 12px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #333; }
+        h3 { font-size: 10px; color: var(--accent); margin: 0 0 10px 0; text-transform: uppercase; }
+        
+        #countdown { position: absolute; font-size: 200px; font-weight: bold; color: var(--accent); z-index: 500; display: none; text-shadow: 0 0 30px black; }
+        .btn-fs { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.2); color: white; border: none; padding: 10px; cursor: pointer; z-index: 200; }
     </style>
 </head>
 <body>
-    <div id="leftPanel">
-        <i id="leftPanelToggle" class="fa fa-cog"></i>
-        <h2>Setări Aparat</h2>
-        <div class="section">
-            <div class="control-group">
-                <select>
-                    <option>USB3. 0 capture</option>
-                </select>
-                <button>START LIVE VIEW</button>
-            </div>
-        </div>
-        <div class="section">
-            <h3>2. TELECOMANDĂ & TASTĂ</h3>
-            <button>SETEAZĂ TASTA CAPTURĂ</button>
-            <div style="font-size: 0.8rem; color: #888; margin-top: 5px;">Tastă: Space</div>
-            <div style="font-size: 0.8rem; color: #00ff00; margin-top: 5px;">TELECOMANDĂ: CONECTATĂ</div>
-        </div>
-        <div class="section">
-            <h3>3. AJUSTĂRI IMAGINE</h3>
-            <div class="control-group">
-                <label>Luminozitate</label>
-                <input type="range" min="0" max="200" value="100">
-            </div>
-            <div class="control-group">
-                <label>Contrast</label>
-                <input type="range" min="0" max="200" value="100">
-            </div>
-        </div>
-        <div class="section">
-            <h3>4. FUNDAL AI (DOAR POZĂ)</h3>
-            <select>
-                <option>Fără (Original)</option>
-            </select>
-            <input type="file">
-        </div>
-        
-        <div class="section">
-            <h3>5. TIMER CAPTURĂ</h3>
-            <div class="control-group" style="display: flex; align-items: center; justify-content: space-between;">
-                <label>Activare Timer</label>
-                <label class="toggle-switch">
-                    <input type="checkbox" id="timerToggle">
-                    <span class="slider-round"></span>
-                </label>
-            </div>
-            <div class="control-group" id="timerSecondsGroup" style="display: none;">
-                <label>Secunde (1-5)</label>
-                <input type="number" id="timerSeconds" min="1" max="5" value="3">
-            </div>
-        </div>
 
-        <button id="snapBtn">FĂ POZA (SNAP)</button>
-    </div>
-    
-    <div id="rightArea">
-        <div id="videoWrapper">
-            <i id="fullscreenBtn" class="fas fa-expand"></i>
-            <div id="countdownOverlay"></div>
-            <video id="videoFeed" autoplay playsinline></video>
-        </div>
+<button id="toggleMenu">SETĂRI</button>
+<div id="countdown">3</div>
+
+<div class="sidebar" id="sidebar">
+    <div class="card">
+        <h3>1. APARAT FOTO</h3>
+        <select id="camSelect" style="width:100%; background:#000; color:white;"></select>
+        <button id="startBtn" style="width:100%; margin-top:10px;">START LIVE</button>
     </div>
 
-    <script>
-        // Selectori
-        const leftPanelToggle = document.getElementById('leftPanelToggle');
-        const leftPanel = document.getElementById('leftPanel');
-        const fullscreenBtn = document.getElementById('fullscreenBtn');
-        const videoWrapper = document.getElementById('videoWrapper');
-        const videoFeed = document.getElementById('videoFeed');
-        const snapBtn = document.getElementById('snapBtn');
-        const timerToggle = document.getElementById('timerToggle');
-        const timerSecondsGroup = document.getElementById('timerSecondsGroup');
-        const timerSeconds = document.getElementById('timerSeconds');
-        const countdownOverlay = document.getElementById('countdownOverlay');
+    <div class="card">
+        <h3>2. TELECOMANDĂ</h3>
+        <div id="remoteStatus" style="color: #ff4757; font-size: 11px;">STARE: DECONECTATĂ</div>
+    </div>
 
-        // Inițializarea camerei web pentru LIVE VIEW
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            navigator.mediaDevices.getUserMedia({ video: true })
-                .then(function(stream) {
-                    videoFeed.srcObject = stream;
-                })
-                .catch(function(error) {
-                    console.error("Eroare la accesarea camerei web:", error);
-                    // Aici poți adăuga un mesaj vizual pe ecran pentru utilizator.
-                });
-        }
+    <div class="card">
+        <h3>3. TIMER CAPTURĂ</h3>
+        <label style="font-size:12px;">Activare Timer:</label>
+        <input type="checkbox" id="timerActive" checked>
+        <br>
+        <label style="font-size:12px;">Secunde: <span id="secVal">3</span></label>
+        <input type="range" id="timerSecs" min="1" max="5" value="3" style="width:100%;">
+    </div>
 
-        // Toggling Left Panel
-        leftPanelToggle.addEventListener('click', () => {
-            leftPanel.classList.toggle('collapsed');
-            const icon = leftPanelToggle;
-            if (leftPanel.classList.contains('collapsed')) {
-                icon.classList.remove('fa-cog');
-                icon.classList.add('fa-eye');
-            } else {
-                icon.classList.remove('fa-eye');
-                icon.classList.add('fa-cog');
-            }
-        });
+    <div class="card">
+        <h3>4. IMAGINE</h3>
+        <label style="font-size:10px;">Luminos.</label>
+        <input type="range" id="br" min="0" max="200" value="100" style="width:100%;">
+        <label style="font-size:10px;">Contrast</label>
+        <input type="range" id="ct" min="50" max="150" value="100" style="width:100%;">
+    </div>
 
-        // Buton Full Screen
-        fullscreenBtn.addEventListener('click', () => {
-            if (!document.fullscreenElement) {
-                videoWrapper.requestFullscreen().catch(err => {
-                    alert(`Eroare la activarea Fullscreen: ${err.message}`);
-                });
-            } else {
-                document.exitFullscreen();
-            }
-        });
+    <button id="capBtn" style="width:100%; padding:20px; background:var(--accent); font-weight:bold; border:none; cursor:pointer;">FĂ POZA (SNAP)</button>
+    <button id="fullScreenBtn" class="btn-fs" style="position:static; margin-top:10px; width:100%;">FULL SCREEN</button>
+</div>
 
-        // Actualizare pictograme la ieșirea din fullscreen
-        document.addEventListener('fullscreenchange', () => {
-            if (!document.fullscreenElement) {
-                fullscreenBtn.classList.remove('fa-compress');
-                fullscreenBtn.classList.add('fa-expand');
-            } else {
-                fullscreenBtn.classList.remove('fa-expand');
-                fullscreenBtn.classList.add('fa-compress');
-            }
-        });
+<div class="main" id="mainArea">
+    <video id="video" autoplay playsinline></video>
+</div>
 
-        // Afișare/ascundere setări secunde timer
-        timerToggle.addEventListener('change', () => {
-            timerSecondsGroup.style.display = timerToggle.checked ? 'block' : 'none';
-        });
+<canvas id="procCanvas" style="display:none;"></canvas>
 
-        // Logica de captură a imaginii
-        snapBtn.addEventListener('click', triggerCapture);
+<script>
+    const v = document.getElementById('video'), sidebar = document.getElementById('sidebar');
+    const timerSecs = document.getElementById('timerSecs'), secVal = document.getElementById('secVal');
+    const countdown = document.getElementById('countdown');
 
-        // De asemenea, putem face triger pe tasta Space (bazat pe textul de pe UI)
-        window.addEventListener('keydown', (e) => {
-            if (e.code === 'Space') {
-                e.preventDefault(); // Prevenim scroll-ul paginii cu Space
-                triggerCapture();
-            }
-        });
+    // 1. Telecomanda (PeerJS) - REPARATĂ
+    const PEER_ID = 'djcioko_canon_booth_2026_xyz'; 
+    const peer = new Peer(PEER_ID);
+    peer.on('connection', (conn) => {
+        document.getElementById('remoteStatus').innerText = "STARE: CONECTATĂ";
+        document.getElementById('remoteStatus').style.color = "#00ff88";
+        conn.on('data', (data) => { if(data === 'SNAP') startCapture(); });
+    });
 
-        function triggerCapture() {
-            if (timerToggle.checked) {
-                startCountdown(timerSeconds.value);
-            } else {
-                takePhoto();
-            }
-        }
+    // 2. Control Meniu & Fullscreen
+    document.getElementById('toggleMenu').onclick = () => sidebar.classList.toggle('hidden');
+    document.getElementById('fullScreenBtn').onclick = () => document.getElementById('mainArea').requestFullscreen();
 
-        function startCountdown(seconds) {
-            let currentSeconds = parseInt(seconds);
-            countdownOverlay.innerText = currentSeconds;
-            countdownOverlay.classList.add('active');
+    // 3. Timer & Secunde
+    timerSecs.oninput = () => secVal.innerText = timerSecs.value;
 
-            const interval = setInterval(() => {
-                currentSeconds--;
-                if (currentSeconds > 0) {
-                    countdownOverlay.innerText = currentSeconds;
-                } else {
-                    clearInterval(interval);
-                    countdownOverlay.classList.remove('active');
-                    takePhoto(); // Facem poza când countdown-ul ajunge la 0
-                }
+    function startCapture() {
+        if(document.getElementById('timerActive').checked) {
+            let count = parseInt(timerSecs.value);
+            countdown.style.display = 'block';
+            countdown.innerText = count;
+            let interval = setInterval(() => {
+                count--;
+                if(count > 0) countdown.innerText = count;
+                else { clearInterval(interval); countdown.style.display = 'none'; takePhoto(); }
             }, 1000);
+        } else {
+            takePhoto();
         }
+    }
 
-        function takePhoto() {
-            // Aici se va afla codul tău original pentru salvarea imaginii.
-            // Presupunând că ai un element canvas pe care desenezi imaginea video...
-            const canvas = document.createElement('canvas');
-            canvas.width = videoFeed.videoWidth;
-            canvas.height = videoFeed.videoHeight;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(videoFeed, 0, 0, canvas.width, canvas.height);
+    // 4. Salvare Automată (Fără click pe Save)
+    function takePhoto() {
+        const can = document.getElementById('procCanvas');
+        can.width = v.videoWidth; can.height = v.videoHeight;
+        const ctx = can.getContext('2d');
+        ctx.filter = v.style.filter;
+        ctx.drawImage(v, 0, 0);
+        
+        const link = document.createElement('a');
+        link.download = `Foto_${Date.now()}.png`;
+        link.href = can.toDataURL('image/png');
+        link.click(); // Salvare automată
+    }
 
-            // Conversia canvas-ului în date URL (un fișier imagine virtual)
-            const imageDataUrl = canvas.toDataURL('image/png');
+    // Camere & Filtre
+    document.getElementById('capBtn').onclick = startCapture;
+    document.getElementById('br').oninput = () => v.style.filter = `brightness(${document.getElementById('br').value}%) contrast(${document.getElementById('ct').value}%)`;
+    document.getElementById('ct').oninput = () => v.style.filter = `brightness(${document.getElementById('br').value}%) contrast(${document.getElementById('ct').value}%)`;
 
-            // --- Soluția pentru Salvarea Automată (Descarcă Imediat) ---
-            const downloadLink = document.createElement('a');
-            const timestamp = new Date().toISOString().replace(/:/g, '-').slice(0, 19);
-            downloadLink.download = `CanonPhoto_${timestamp}.png`;
-            downloadLink.href = imageDataUrl;
-            document.body.appendChild(downloadLink);
-            downloadLink.click(); // Declansăm programatic descărcarea
-            document.body.removeChild(downloadLink); // Curățăm DOM-ul
-
-            console.log("Poza a fost capturată și s-a declanșat descărcarea.");
-        }
-    </script>
+    async function init() {
+        const devs = await navigator.mediaDevices.enumerateDevices();
+        const cams = devs.filter(d => d.kind === 'videoinput');
+        document.getElementById('camSelect').innerHTML = cams.map((c, i) => `<option value="${c.deviceId}">${c.label || 'Camera '+(i+1)}</option>`).join('');
+    }
+    document.getElementById('startBtn').onclick = async () => {
+        const s = await navigator.mediaDevices.getUserMedia({video:{deviceId:{exact:document.getElementById('camSelect').value}, width:1920, height:1080}});
+        v.srcObject = s;
+    };
+    init();
+</script>
 </body>
 </html>
