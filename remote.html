@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { background: #000; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .btn-remote { 
+            width: 250px; height: 250px; border-radius: 50%; border: 10px solid #00ff88;
+            background: none; color: #00ff88; font-size: 30px; font-weight: bold;
+            box-shadow: 0 0 30px rgba(0,255,136,0.3); cursor: pointer;
+        }
+        .btn-remote:active { background: #00ff88; color: #000; transform: scale(0.95); }
+    </style>
+</head>
+<body>
+    <button class="btn-remote" onclick="sendSnap()">FĂ POZA</button>
+
+    <script>
+        const remoteID = "booth_canon_2026";
+        async function sendSnap() {
+            await fetch(`https://api.valer.io/set?key=${remoteID}&val={"cmd":"snap"}`);
+            // Feedback haptic (vibrează telefonul când apeși)
+            if(navigator.vibrate) navigator.vibrate(100);
+        }
+    </script>
+</body>
+</html>
