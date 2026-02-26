@@ -3,29 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Canon AI Booth - Custom Trigger</title>
+    <title>Canon Studio Pro - Hybrid & Remote</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         :root { --accent: #00ff88; }
         body { background: #000; color: white; font-family: sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
-        .sidebar { width: 260px; background: #111; padding: 15px; border-right: 1px solid #333; overflow-y: auto; }
+        .sidebar { width: 260px; background: #111; padding: 15px; border-right: 1px solid #333; overflow-y: auto; z-index: 10; }
         .main { flex-grow: 1; display: flex; align-items: center; justify-content: center; position: relative; background: #050505; }
         video { max-width: 95%; max-height: 95%; border: 1px solid #222; transform: scaleX(-1); }
         .card { background: #1a1a1a; padding: 12px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #333; }
         h3 { font-size: 10px; color: var(--accent); margin: 0 0 10px 0; text-transform: uppercase; }
         select, input[type="range"], .btn { width: 100%; margin: 5px 0; box-sizing: border-box; }
-        .btn { padding: 15px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; transition: 0.2s; }
+        .btn { padding: 15px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; }
         .btn-start { background: #333; color: white; }
         .btn-capture { background: var(--accent); color: black; margin-top: 15px; }
-        .btn-key { background: #444; color: #00ff88; font-size: 11px; border: 1px dashed var(--accent); }
+        .btn-key { background: #444; color: #00ff88; font-size: 11px; }
         label { font-size: 9px; color: #666; }
-        #loading { position: absolute; display: none; background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px; z-index: 200; border: 1px solid var(--accent); text-align: center; }
-        #countdown { position: absolute; font-size: 150px; font-weight: bold; color: var(--accent); z-index: 300; display: none; text-shadow: 0 0 20px black; }
+        #loading { position: absolute; display: none; background: rgba(0,0,0,0.9); padding: 20px; border-radius: 10px; z-index: 500; border: 1px solid var(--accent); text-align: center; }
+        #countdown { position: absolute; font-size: 180px; font-weight: bold; color: var(--accent); z-index: 400; display: none; text-shadow: 0 0 30px black; pointer-events: none; }
+        #remoteStatus { font-size: 9px; color: #ff4757; text-align: center; display: block; margin-top: 5px; }
     </style>
 </head>
 <body>
 
-<div id="loading">PROCESARE AI...<br><small>Vă rugăm așteptați</small></div>
+<div id="loading">PROCESARE AI...<br>SALVARE IMAGINE</div>
 <div id="countdown">3</div>
 
 <div class="sidebar">
@@ -36,9 +38,10 @@
     </div>
 
     <div class="card">
-        <h3>2. TRIGGER TASTĂ</h3>
+        <h3>2. CONTROL TASTĂ</h3>
         <button id="setKeyBtn" class="btn btn-key">SETEAZĂ TASTA CAPTURĂ</button>
-        <p id="keyStatus" style="font-size: 10px; color: #888; text-align: center; margin-top: 5px;">Tasta actuală: <b id="currentKey">Space</b></p>
+        <p style="font-size: 10px; color: #888; text-align: center;">Tastă: <b id="currentKey">Space</b></p>
+        <span id="remoteStatus">Telecomanda: DECONECTATĂ</span>
     </div>
 
     <div class="card">
@@ -50,7 +53,7 @@
     </div>
 
     <div class="card">
-        <h3>4. FUNDAL AI</h3>
+        <h3>4. FUNDAL AI (POZĂ)</h3>
         <select id="bgMode">
             <option value="none">Fără (Original)</option>
             <option value="image">Înlocuire Fundal</option>
@@ -58,7 +61,7 @@
         <input type="file" id="bgFile" accept="image/*">
     </div>
 
-    <button id="capBtn" class="btn btn-capture">FĂ POZA (Click sau Tastă)</button>
+    <button id="capBtn" class="btn btn-capture">FĂ POZA (SNAP)</button>
 </div>
 
 <div class="main">
@@ -70,44 +73,52 @@
 
 <script>
     const v = document.getElementById('video'), sel = document.getElementById('camSelect'), bgImg = document.getElementById('bgImg');
-    const procCanvas = document.getElementById('procCanvas'), ctx = procCanvas.getContext('2d');
-    const countEl = document.getElementById('countdown');
+    const procCanvas = document.getElementById('procCanvas'), ctx = procCanvas.getContext('2d'), countEl = document.getElementById('countdown');
     
-    let captureKey = localStorage.getItem('captureKey') || " "; // Implicit Space
-    let isListeningForKey = false;
+    // --- TELECOMANDĂ (PEERJS) ---
+    const PEER_ID = 'canon_booth_dj_1234'; 
+    const peer = new Peer(PEER_ID);
 
-    // Inițializare AI
+    peer.on('open', (id) => console.log('Laptop gata cu ID:', id));
+    peer.on('connection', (conn) => {
+        document.getElementById('remoteStatus').innerText = "Telecomanda: CONECTATĂ";
+        document.getElementById('remoteStatus').style.color = "#00ff88";
+        conn.on('data', (data) => { if (data === 'SNAP') startCaptureSequence(); });
+        conn.on('close', () => {
+            document.getElementById('remoteStatus').innerText = "Telecomanda: DECONECTATĂ";
+            document.getElementById('remoteStatus').style.color = "#ff4757";
+        });
+    });
+
+    // --- AI CONFIG ---
     const selfie = new SelfieSegmentation({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}`});
     selfie.setOptions({ modelSelection: 1 });
+    selfie.onResults((res) => saveFinal(res));
 
-    // --- LOGICĂ TASTĂ PERSONALIZATĂ ---
+    // --- LOGICĂ TASTĂ ---
+    let captureKey = localStorage.getItem('captureKey') || " ";
+    let isListening = false;
     document.getElementById('currentKey').innerText = captureKey === " " ? "Space" : captureKey;
 
     document.getElementById('setKeyBtn').onclick = () => {
-        isListeningForKey = true;
-        document.getElementById('setKeyBtn').innerText = "APASĂ TASTA DORITĂ...";
-        document.getElementById('setKeyBtn').style.background = "#ff4757";
+        isListening = true;
+        document.getElementById('setKeyBtn').innerText = "APASĂ TASTA...";
     };
 
     window.addEventListener('keydown', (e) => {
-        if (isListeningForKey) {
+        if (isListening) {
             captureKey = e.key;
             localStorage.setItem('captureKey', captureKey);
             document.getElementById('currentKey').innerText = captureKey === " " ? "Space" : captureKey;
-            isListeningForKey = false;
+            isListening = false;
             document.getElementById('setKeyBtn').innerText = "SETEAZĂ TASTA CAPTURĂ";
-            document.getElementById('setKeyBtn').style.background = "#444";
-            e.preventDefault();
-            return;
+            e.preventDefault(); return;
         }
-
-        if (e.key === captureKey) {
-            startCaptureSequence();
-        }
+        if (e.key === captureKey) startCaptureSequence();
     });
 
     // --- VIDEO ---
-    async function init() {
+    async function initCams() {
         const devs = await navigator.mediaDevices.enumerateDevices();
         const cams = devs.filter(d => d.kind === 'videoinput');
         sel.innerHTML = cams.map((c, i) => `<option value="${c.deviceId}">${c.label || 'Camera ' + (i+1)}</option>`).join('');
@@ -118,51 +129,44 @@
         v.srcObject = stream;
     };
 
-    function updateV() { v.style.filter = `brightness(${document.getElementById('br').value}%) contrast(${document.getElementById('ct').value}%)`; }
+    function updateV() { 
+        v.style.filter = `brightness(${document.getElementById('br').value}%) contrast(${document.getElementById('ct').value}%)`; 
+        // Salvare automată setări conform instrucțiunilor tale
+        localStorage.setItem('booth_br', document.getElementById('br').value);
+        localStorage.setItem('booth_ct', document.getElementById('ct').value);
+    }
     document.getElementById('br').oninput = updateV;
     document.getElementById('ct').oninput = updateV;
     document.getElementById('bgFile').onchange = (e) => { bgImg.src = URL.createObjectURL(e.target.files[0]); };
 
-    // --- SECVENȚĂ CAPTURĂ ---
+    // --- SECVENȚĂ FOTO ---
     document.getElementById('capBtn').onclick = startCaptureSequence;
 
     function startCaptureSequence() {
-        if(!v.srcObject) return;
-        
+        if(!v.srcObject || countEl.style.display === 'block') return;
         let count = 3;
         countEl.innerText = count;
         countEl.style.display = 'block';
-
-        const timer = setInterval(async () => {
+        const timer = setInterval(() => {
             count--;
-            if(count > 0) {
-                countEl.innerText = count;
-            } else {
-                clearInterval(timer);
-                countEl.style.display = 'none';
-                triggerAI();
-            }
+            if(count > 0) countEl.innerText = count;
+            else { clearInterval(timer); countEl.style.display = 'none'; triggerCapture(); }
         }, 1000);
     }
 
-    async function triggerAI() {
+    async function triggerCapture() {
         document.getElementById('loading').style.display = 'block';
-        const mode = document.getElementById('bgMode').value;
-
-        if(mode === 'image' && bgImg.src) {
+        if(document.getElementById('bgMode').value === 'image' && bgImg.src) {
             await selfie.send({ image: v });
         } else {
             saveFinal(null);
         }
     }
 
-    selfie.onResults((res) => saveFinal(res));
-
     function saveFinal(results) {
         procCanvas.width = 1920; procCanvas.height = 1080;
         ctx.save();
         ctx.filter = v.style.filter;
-
         if (results && results.segmentationMask) {
             ctx.drawImage(bgImg, 0, 0, 1920, 1080);
             const tCan = document.createElement('canvas'); tCan.width = 1920; tCan.height = 1080;
@@ -174,18 +178,21 @@
         } else {
             ctx.drawImage(v, 0, 0, 1920, 1080);
         }
-        
         ctx.restore();
-
         const link = document.createElement('a');
-        link.download = `Booth_${Date.now()}.png`;
+        link.download = `Canon_Booth_${Date.now()}.png`;
         link.href = procCanvas.toDataURL('image/png');
         link.click();
-        
         document.getElementById('loading').style.display = 'none';
     }
 
-    navigator.mediaDevices.getUserMedia({video: true}).then(init);
+    // Încărcare setări salvate
+    window.onload = () => {
+        if(localStorage.getItem('booth_br')) document.getElementById('br').value = localStorage.getItem('booth_br');
+        if(localStorage.getItem('booth_ct')) document.getElementById('ct').value = localStorage.getItem('booth_ct');
+        updateV();
+        navigator.mediaDevices.getUserMedia({video: true}).then(initCams);
+    };
 </script>
 </body>
 </html>
