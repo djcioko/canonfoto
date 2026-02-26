@@ -10,21 +10,26 @@
         :root { --accent: #00ff88; }
         body { background: #000; color: white; font-family: sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
         
-        /* Panoul Lateral */
         .sidebar { width: 280px; background: #111; padding: 15px; border-right: 1px solid #333; overflow-y: auto; transition: 0.3s; z-index: 100; }
         .sidebar.hidden { margin-left: -280px; }
         
-        /* Buton de revenire la setări - Vizibil mereu */
         #toggleMenu { position: fixed; bottom: 20px; left: 20px; z-index: 999; background: var(--accent); color: black; border: none; padding: 10px 15px; border-radius: 5px; font-weight: bold; cursor: pointer; }
 
         .main { flex-grow: 1; display: flex; align-items: center; justify-content: center; position: relative; background: #000; }
-        video { max-width: 100%; max-height: 100%; transform: scaleX(-1); }
+        
+        /* REPARAȚIE CADRU: Eliminat scaleX(-1) și asigurat aspect ratio */
+        video { 
+            max-width: 95%; 
+            max-height: 95%; 
+            box-shadow: 0 0 20px rgba(0,255,136,0.2);
+            object-fit: contain;
+        }
         
         .card { background: #1a1a1a; padding: 12px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #333; }
         h3 { font-size: 10px; color: var(--accent); margin: 0 0 10px 0; text-transform: uppercase; }
         
         #countdown { position: absolute; font-size: 200px; font-weight: bold; color: var(--accent); z-index: 500; display: none; text-shadow: 0 0 30px black; }
-        .btn-fs { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.2); color: white; border: none; padding: 10px; cursor: pointer; z-index: 200; }
+        .btn-fs { background: rgba(255,255,255,0.1); color: white; border: 1px solid #444; padding: 10px; cursor: pointer; border-radius: 4px; }
     </style>
 </head>
 <body>
@@ -35,20 +40,20 @@
 <div class="sidebar" id="sidebar">
     <div class="card">
         <h3>1. APARAT FOTO</h3>
-        <select id="camSelect" style="width:100%; background:#000; color:white;"></select>
-        <button id="startBtn" style="width:100%; margin-top:10px;">START LIVE</button>
+        <select id="camSelect" style="width:100%; background:#000; color:white; padding:5px;"></select>
+        <button id="startBtn" style="width:100%; margin-top:10px; cursor:pointer;">START LIVE</button>
     </div>
 
     <div class="card">
         <h3>2. TELECOMANDĂ</h3>
-        <div id="remoteStatus" style="color: #ff4757; font-size: 11px;">STARE: DECONECTATĂ</div>
+        <div id="remoteStatus" style="color: #ff4757; font-size: 11px; font-weight:bold;">STARE: DECONECTATĂ</div>
     </div>
 
     <div class="card">
         <h3>3. TIMER CAPTURĂ</h3>
         <label style="font-size:12px;">Activare Timer:</label>
         <input type="checkbox" id="timerActive" checked>
-        <br>
+        <br><br>
         <label style="font-size:12px;">Secunde: <span id="secVal">3</span></label>
         <input type="range" id="timerSecs" min="1" max="5" value="3" style="width:100%;">
     </div>
@@ -61,8 +66,8 @@
         <input type="range" id="ct" min="50" max="150" value="100" style="width:100%;">
     </div>
 
-    <button id="capBtn" style="width:100%; padding:20px; background:var(--accent); font-weight:bold; border:none; cursor:pointer;">FĂ POZA (SNAP)</button>
-    <button id="fullScreenBtn" class="btn-fs" style="position:static; margin-top:10px; width:100%;">FULL SCREEN</button>
+    <button id="capBtn" style="width:100%; padding:20px; background:var(--accent); font-weight:bold; border:none; cursor:pointer; border-radius:8px;">FĂ POZA (SNAP)</button>
+    <button id="fullScreenBtn" class="btn-fs" style="margin-top:10px; width:100%;">FULL SCREEN</button>
 </div>
 
 <div class="main" id="mainArea">
@@ -75,8 +80,24 @@
     const v = document.getElementById('video'), sidebar = document.getElementById('sidebar');
     const timerSecs = document.getElementById('timerSecs'), secVal = document.getElementById('secVal');
     const countdown = document.getElementById('countdown');
+    const brInput = document.getElementById('br'), ctInput = document.getElementById('ct');
 
-    // 1. Telecomanda (PeerJS) - REPARATĂ
+    // --- REȚINERE SETĂRI (Conform cerinței tale) ---
+    function loadSettings() {
+        if(localStorage.getItem('booth_br')) brInput.value = localStorage.getItem('booth_br');
+        if(localStorage.getItem('booth_ct')) ctInput.value = localStorage.getItem('booth_ct');
+        if(localStorage.getItem('booth_timer')) timerSecs.value = localStorage.getItem('booth_timer');
+        secVal.innerText = timerSecs.value;
+        applyFilters();
+    }
+
+    function saveSettings() {
+        localStorage.setItem('booth_br', brInput.value);
+        localStorage.setItem('booth_ct', ctInput.value);
+        localStorage.setItem('booth_timer', timerSecs.value);
+    }
+
+    // --- TELECOMANDĂ ---
     const PEER_ID = 'djcioko_canon_booth_2026_xyz'; 
     const peer = new Peer(PEER_ID);
     peer.on('connection', (conn) => {
@@ -85,13 +106,26 @@
         conn.on('data', (data) => { if(data === 'SNAP') startCapture(); });
     });
 
-    // 2. Control Meniu & Fullscreen
+    // --- UI CONTROLS ---
     document.getElementById('toggleMenu').onclick = () => sidebar.classList.toggle('hidden');
-    document.getElementById('fullScreenBtn').onclick = () => document.getElementById('mainArea').requestFullscreen();
+    document.getElementById('fullScreenBtn').onclick = () => {
+        const elem = document.getElementById('mainArea');
+        if (elem.requestFullscreen) elem.requestFullscreen();
+    };
 
-    // 3. Timer & Secunde
-    timerSecs.oninput = () => secVal.innerText = timerSecs.value;
+    timerSecs.oninput = () => {
+        secVal.innerText = timerSecs.value;
+        saveSettings();
+    };
 
+    function applyFilters() {
+        v.style.filter = `brightness(${brInput.value}%) contrast(${ctInput.value}%)`;
+        saveSettings();
+    }
+    brInput.oninput = applyFilters;
+    ctInput.oninput = applyFilters;
+
+    // --- LOGICĂ CAPTURĂ ---
     function startCapture() {
         if(document.getElementById('timerActive').checked) {
             let count = parseInt(timerSecs.value);
@@ -107,7 +141,6 @@
         }
     }
 
-    // 4. Salvare Automată (Fără click pe Save)
     function takePhoto() {
         const can = document.getElementById('procCanvas');
         can.width = v.videoWidth; can.height = v.videoHeight;
@@ -116,25 +149,34 @@
         ctx.drawImage(v, 0, 0);
         
         const link = document.createElement('a');
-        link.download = `Foto_${Date.now()}.png`;
+        link.download = `Canon_Photo_${Date.now()}.png`;
         link.href = can.toDataURL('image/png');
-        link.click(); // Salvare automată
+        link.click();
     }
 
-    // Camere & Filtre
     document.getElementById('capBtn').onclick = startCapture;
-    document.getElementById('br').oninput = () => v.style.filter = `brightness(${document.getElementById('br').value}%) contrast(${document.getElementById('ct').value}%)`;
-    document.getElementById('ct').oninput = () => v.style.filter = `brightness(${document.getElementById('br').value}%) contrast(${document.getElementById('ct').value}%)`;
 
+    // --- INITIALIZARE CAMERĂ ---
     async function init() {
+        loadSettings();
         const devs = await navigator.mediaDevices.enumerateDevices();
         const cams = devs.filter(d => d.kind === 'videoinput');
         document.getElementById('camSelect').innerHTML = cams.map((c, i) => `<option value="${c.deviceId}">${c.label || 'Camera '+(i+1)}</option>`).join('');
     }
+
     document.getElementById('startBtn').onclick = async () => {
-        const s = await navigator.mediaDevices.getUserMedia({video:{deviceId:{exact:document.getElementById('camSelect').value}, width:1920, height:1080}});
+        const constraints = {
+            video: {
+                deviceId: { exact: document.getElementById('camSelect').value },
+                width: { ideal: 1920 },
+                height: { ideal: 1080 }
+            }
+        };
+        const s = await navigator.mediaDevices.getUserMedia(constraints);
         v.srcObject = s;
+        applyFilters();
     };
+
     init();
 </script>
 </body>
