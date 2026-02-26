@@ -2,150 +2,113 @@
 <html lang="ro">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Canon Studio - Force USB</title>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Canon Monitor - Pro</title>
     <style>
-        :root { --accent: #00ff88; --bg: #0a0a0a; }
-        body { background: var(--bg); color: white; font-family: sans-serif; margin: 0; display: flex; height: 100vh; }
-        .sidebar { width: 280px; background: #151515; padding: 15px; border-right: 1px solid #333; z-index: 10; overflow-y: auto; }
-        .main-view { flex-grow: 1; display: flex; align-items: center; justify-content: center; background: #000; }
-        canvas { max-width: 95%; max-height: 95%; border: 2px solid #333; box-shadow: 0 0 20px rgba(0,255,136,0.2); }
-        .card { background: #222; padding: 12px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #333; }
-        h3 { font-size: 11px; color: var(--accent); margin: 0 0 10px 0; text-transform: uppercase; border-bottom: 1px solid #333; padding-bottom: 5px; }
-        select, input[type="range"], .btn { width: 100%; margin: 8px 0; display: block; box-sizing: border-box; }
-        .btn { padding: 15px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; background: var(--accent); color: black; font-size: 14px; }
-        .btn-scan { background: #444; color: white; padding: 10px; font-size: 11px; }
-        label { font-size: 10px; color: #888; display: block; margin-top: 5px; }
-        .hidden { display: none !important; }
+        body { background: #000; color: white; font-family: sans-serif; margin: 0; overflow: hidden; display: flex; }
+        .sidebar { width: 250px; background: #111; padding: 15px; border-right: 1px solid #333; z-index: 100; }
+        .main { flex-grow: 1; display: flex; align-items: center; justify-content: center; position: relative; }
+        video { max-width: 100%; max-height: 100%; transform: scaleX(1); } /* Schimbă la -1 dacă vrei oglindă */
+        
+        .card { background: #222; padding: 10px; border-radius: 8px; margin-bottom: 10px; }
+        h3 { font-size: 10px; color: #00ff88; text-transform: uppercase; margin: 0 0 10px 0; }
+        select, .btn { width: 100%; padding: 12px; margin-top: 5px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; }
+        .btn-start { background: #00ff88; color: #000; }
+        .btn-capture { background: #ff4757; color: #fff; margin-top: 20px; font-size: 16px; }
+        
+        /* Efecte de imagine (CSS pur, nu blochează procesorul) */
+        #v-container { position: relative; }
     </style>
 </head>
 <body>
 
-<div class="sidebar" id="sidebar">
+<div class="sidebar">
     <div class="card">
-        <h3>1. CONECTARE CANON</h3>
-        <button id="scanBtn" class="btn btn-scan">PAS 1: DETECTARE TOTALĂ</button>
-        <label>Selectează sursa (Alege ultima din listă):</label>
-        <select id="camList" style="background:#000; color:white; padding:10px; border:1px solid var(--accent);"></select>
-        <button id="startBtn" class="btn">PAS 2: PORNEȘTE VIDEO</button>
+        <h3>1. SURSA VIDEO</h3>
+        <select id="camSelect" style="background:#333; color:white;"></select>
+        <button id="startBtn" class="btn btn-start">PORNEȘTE CAMERA</button>
     </div>
 
     <div class="card">
-        <h3>2. IMAGINE & CULOARE</h3>
-        <label>Luminozitate</label>
-        <input type="range" id="bright" min="0" max="200" value="100">
-        <label>Saturație</label>
-        <input type="range" id="sat" min="0" max="200" value="100">
-        <label>Contrast</label>
-        <input type="range" id="cont" min="50" max="150" value="100">
+        <h3>2. AJUSTARE (REAL-TIME)</h3>
+        <label style="font-size:10px;">Luminozitate</label>
+        <input type="range" id="br" min="0" max="200" value="100" style="width:100%">
+        <label style="font-size:10px;">Contrast</label>
+        <input type="range" id="ct" min="50" max="150" value="100" style="width:100%">
     </div>
 
-    <div class="card">
-        <h3>3. FUNDAL (UPLOAD FOTO)</h3>
-        <select id="bgType">
-            <option value="none">Fără Fundal (Natural)</option>
-            <option value="image">Fundal Personalizat</option>
-        </select>
-        <input type="file" id="bgFile" accept="image/*">
-    </div>
-
-    <button id="capBtn" class="btn" style="background:#ff4757; color:white;">FĂ POZA & SALVEAZĂ</button>
-    <p style="font-size: 9px; color: #555; text-align: center; margin-top: 10px;">Dublu-click pe video pentru Full Screen</p>
+    <button id="capBtn" class="btn btn-capture">SALVEAZĂ POZA</button>
+    <p id="status" style="font-size:10px; color:#666; text-align:center; margin-top:10px;">Conectați HDMI Capture Card</p>
 </div>
 
-<div class="main-view"><canvas id="out"></canvas></div>
-<video id="v" autoplay playsinline muted style="display:none"></video>
-<img id="bg_img" style="display:none">
+<div class="main">
+    <div id="v-container">
+        <video id="video" autoplay playsinline></video>
+    </div>
+</div>
+
+<canvas id="canvas" style="display:none;"></canvas>
 
 <script>
-    const video = document.getElementById('v'), canvas = document.getElementById('out'), ctx = canvas.getContext('2d'), bgImg = document.getElementById('bg_img'), camList = document.getElementById('camList');
-    let activeStream = null;
+    const v = document.getElementById('video');
+    const sel = document.getElementById('camSelect');
+    const btn = document.getElementById('startBtn');
+    const cap = document.getElementById('capBtn');
+    const can = document.getElementById('canvas');
 
-    // --- DETECTARE AGRESIVĂ ---
-    async function forceScan() {
-        try {
-            // Pas 1: Cerem accesul la orice cameră pentru a "trezi" permisiunile
-            const initial = await navigator.mediaDevices.getUserMedia({ video: true });
-            initial.getTracks().forEach(t => t.stop());
-
-            // Pas 2: Scanăm dispozitivele
-            const devices = await navigator.mediaDevices.enumerateDevices();
-            camList.innerHTML = '';
-            
-            const videoDevices = devices.filter(d => d.kind === 'videoinput');
-            
-            videoDevices.forEach((device, i) => {
-                const opt = document.createElement('option');
-                opt.value = device.deviceId;
-                // Dacă label e gol, forțăm un nume. De obicei USB e ultima cameră.
-                opt.text = device.label || `Sursă Externă / USB (${i + 1})`;
-                camList.appendChild(opt);
-            });
-
-            // Selectăm automat ultima cameră (cea mai probabilă să fie USB)
-            if(camList.options.length > 0) camList.selectedIndex = camList.options.length - 1;
-
-        } catch (e) {
-            alert("Eroare: Trebuie să apeși 'Allow' în browser!");
-        }
+    // 1. Găsește camerele (Inclusiv USB)
+    async function init() {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const cams = devices.filter(d => d.kind === 'videoinput');
+        sel.innerHTML = cams.map((c, i) => `<option value="${c.deviceId}">${c.label || 'Camera ' + (i+1)}</option>`).join('');
     }
 
-    async function start() {
-        if(activeStream) activeStream.getTracks().forEach(t => t.stop());
+    // 2. Pornește imaginea (Fără AI, doar video pur)
+    btn.onclick = async () => {
+        if (v.srcObject) v.srcObject.getTracks().forEach(t => t.stop());
         
-        // Încercăm să deschidem camera selectată
         const constraints = {
-            video: { deviceId: { exact: camList.value } }
+            video: { 
+                deviceId: { exact: sel.value },
+                width: { ideal: 1920 },
+                height: { ideal: 1080 }
+            }
         };
 
         try {
-            activeStream = await navigator.mediaDevices.getUserMedia(constraints);
-            video.srcObject = activeStream;
-            video.onloadedmetadata = () => {
-                video.play();
-                beginAI();
-            };
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            v.srcObject = stream;
+            document.getElementById('status').innerText = "Camera Activă!";
         } catch (e) {
-            alert("Nu am putut porni camera selectată. Încearcă alta din listă.");
+            alert("Eroare la pornire. Încearcă altă cameră din listă.");
         }
-    }
-
-    const ai = new SelfieSegmentation({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}`});
-    ai.setOptions({ modelSelection: 1 });
-    ai.onResults((res) => {
-        canvas.width = 1920; canvas.height = 1080;
-        ctx.save();
-        ctx.filter = `brightness(${document.getElementById('bright').value}%) saturate(${document.getElementById('sat').value}%) contrast(${document.getElementById('cont').value}%)`;
-        
-        if (document.getElementById('bgType').value === 'image' && bgImg.src && res.segmentationMask) {
-            ctx.drawImage(bgImg, 0, 0, 1920, 1080);
-            const tmp = document.createElement('canvas'); tmp.width = 1920; tmp.height = 1080;
-            const tCtx = tmp.getContext('2d');
-            tCtx.drawImage(res.image, 0, 0, 1920, 1080);
-            tCtx.globalCompositeOperation = 'destination-in';
-            tCtx.drawImage(res.segmentationMask, 0, 0, 1920, 1080);
-            ctx.drawImage(tmp, 0, 0);
-        } else {
-            ctx.drawImage(video, 0, 0, 1920, 1080);
-        }
-        ctx.restore();
-    });
-
-    function beginAI() { if(video.readyState >= 2) ai.send({image:video}); requestAnimationFrame(beginAI); }
-
-    document.getElementById('scanBtn').onclick = forceScan;
-    document.getElementById('startBtn').onclick = start;
-    document.getElementById('bgFile').onchange = (e) => { bgImg.src = URL.createObjectURL(e.target.files[0]); };
-    document.getElementById('capBtn').onclick = () => {
-        const a = document.createElement('a');
-        a.download = `STUDIO_FOTO_${Date.now()}.png`;
-        a.href = canvas.toDataURL("image/png");
-        a.click();
     };
-    
-    canvas.ondblclick = () => document.getElementById('sidebar').classList.toggle('hidden');
-    window.onload = forceScan;
+
+    // 3. Aplică filtrele CSS (Sunt mult mai rapide)
+    function updateFilters() {
+        v.style.filter = `brightness(${document.getElementById('br').value}%) contrast(${document.getElementById('ct').value}%)`;
+    }
+    document.getElementById('br').oninput = updateFilters;
+    document.getElementById('ct').oninput = updateFilters;
+
+    // 4. Salvează poza
+    cap.onclick = () => {
+        can.width = v.videoWidth;
+        can.height = v.videoHeight;
+        const ctx = can.getContext('2d');
+        // Aplicăm filtrele și pe poză
+        ctx.filter = v.style.filter;
+        ctx.drawImage(v, 0, 0, can.width, can.height);
+        
+        const link = document.createElement('a');
+        link.download = `Canon_Foto_${Date.now()}.png`;
+        link.href = can.toDataURL('image/png');
+        link.click();
+    };
+
+    // Cerem permisiune la start ca să vedem numele camerelor
+    navigator.mediaDevices.getUserMedia({video: true}).then(init);
 </script>
+
 </body>
 </html>
